@@ -3,10 +3,6 @@ Finite element code for solving the
 1D piecewise linear Galerkin DiffEq (D):
     -(Diff u')' = f  in (a,b)
     u(a) = u(b) = 0  (Dirichlet BC)
-
-1D piecewise quadratic Galerkin DiffEq (CD):
-    -(Diff u')' + b u' = f in (a,b)
-    u(a) = 0; u(b) = 1
 """
 
 import numpy as np
@@ -16,7 +12,7 @@ from itertools import cycle
 
 
 class TestParams:
-    K_CONST = 4
+    K_CONST = 3
     N_DIRICHLET = 2
 
     MIN_NODES_EXP = 3
@@ -27,10 +23,10 @@ class TestParams:
 
     @staticmethod
     def diffusion_function(x):
-        # half_nodes = len(x) // 2
-        # other_half = len(x) - half_nodes
-        # return np.concat((np.ones(half_nodes), 2 * np.ones(other_half)))
-        return np.ones(len(x))
+        half_nodes = len(x) // 2
+        other_half = len(x) - half_nodes
+        return np.concatenate((np.ones(half_nodes), 2 * np.ones(other_half)))
+        # return np.ones(len(x))
 
     @staticmethod
     def u_real(x):
@@ -251,7 +247,7 @@ def calc_l2err(x, f_approx, f_real, nodes_only=False):
     f_approx_vals = np.interp(fine_x, x, f_approx)
 
     error_squared = (f_real_vals - f_approx_vals) ** 2
-    integral = np.trapezoid(error_squared, fine_x)
+    integral = np.trapz(error_squared, fine_x)
 
     return np.sqrt(integral)
 
@@ -316,5 +312,5 @@ def main():
 
 
 if __name__ == '__main__':
-    convergence_test()
+    main()
 
