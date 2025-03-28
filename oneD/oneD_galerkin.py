@@ -12,7 +12,7 @@ from itertools import cycle
 
 
 class TestParams:
-    K_CONST = 3
+    K_CONST = 7
     N_DIRICHLET = 2
 
     MIN_NODES_EXP = 3
@@ -23,10 +23,10 @@ class TestParams:
 
     @staticmethod
     def diffusion_function(x):
-        half_nodes = len(x) // 2
-        other_half = len(x) - half_nodes
-        return np.concatenate((np.ones(half_nodes), 2 * np.ones(other_half)))
-        # return np.ones(len(x))
+        # half_nodes = len(x) // 2
+        # other_half = len(x) - half_nodes
+        # return np.concatenate((np.ones(half_nodes), 2 * np.ones(other_half)))
+        return np.ones(len(x))
 
     @staticmethod
     def u_real(x):
@@ -40,7 +40,7 @@ class TestParams:
         """
         f(x) = (k*pi)^2 sin(k*pi*x)
         """
-        return TestParams.diffusion_function(x) * (TestParams.K_CONST * math.pi)**2 * TestParams.u_real(x)
+        return TestParams.diffusion_function(x)[:, np.newaxis] * (TestParams.K_CONST * math.pi)**2 * TestParams.u_real(x)
 
 
 def elem_indices(n: int, m: int) -> np.ndarray:
@@ -83,7 +83,7 @@ def impose_boundary(
     neumann=False
 ) -> [np.ndarray, np.ndarray]:
     if neumann:
-        return _impose_neumann_boundary(n_dir, penalty=penalty)
+        return _impose_neumann_boundary(n_dir, penalty=penalty) # DEFUNCT
 
     for idir in range(n_dir):
         iglob = boundary_nodes[idir]
@@ -138,22 +138,74 @@ def input_data(x_start: float, x_end: float, n_elem: int, polydeg: int) \
     return nodes, elements, x_coords, n_dirichlet, dirichlet_nodes, dirichlet_vals, diffusion, source, u_real
 
 
-def local_basis(n_elem, x_coords, elems, polydeg=1):
-    phi_0 = np.polynomial.Polynomial((1, -1), domain=[0, 1], window=[0, 1])
-    phi_1 = np.polynomial.Polynomial((0, 1), domain=[0, 1], window=[0, 1])
+def local_basis(polydeg=1):
+    bases = {
+        1: (np.polynomial.Polynomial((1, -1), domain=[0, 1], window=[0, 1]),  # 1-x
+            np.polynomial.Polynomial((0, 1), domain=[0, 1], window=[0, 1])    # x
+            ),
+        2: (np.polynomial.Polynomial((0, -0.5, 0.5), domain=[-1, 1], window=[-1, 1]),  # -0.5x(1-x)
+            np.polynomial.Polynomial((1, 0, -1), domain=[-1, 1], window=[-1, 1]),  # 1-x^2
+            np.polynomial.Polynomial((0, 0.5, 0.5), domain=[-1, 1], window=[-1, 1])  # 0.5x(1+x)
+            )
+    }
 
-    if polydeg == 2:
-        quadratic_bubble = np.polynomial.Polynomial((0, 1, -1), domain=[0, 1], window=[0, 1])
-        p2_basis = phi_0 - quadratic_bubble, phi_1 + quadratic_bubble
-        return p2_basis
-
-    p1_basis = phi_0, phi_1
-    return p1_basis
+    return bases[polydeg]
 
 
-def build_stiffness_matrix(x_coords, basis_coeff, diff):
+def prep_gauss_quadrature(f, dom, nodes):
+    """
+    Preparing a function f for num integration via gaussian quadrature.
+
+    :param f: integrand
+    :param dom: endpoints of domains of integration
+    :param nodes: sampling points in interval [-1,1]
+    :return: array of points where ith row is
+            (dom_i - dom_i-1) * [f(T_i y_0)  f(T_i y_1),  ...,  f(T_i y_n-1)],
+            where
+            - (dom_i - dom_i-1) is the size of the interval and
+            - f(T_i y_j) is the image of the jth node under the
+                affine transformation T_i: [-1,1] -> dom_i
+    """
+    # apply affine transformation from [-1,1] into domains
+    transformed_nodes = (np.array((0.5*np.array([np.diff(dom)])).T @ [nodes + 1]) + dom[:-1][:, np.newaxis])
+
+    return np.diff(dom)[:, np.newaxis]/2 * f(transformed_nodes)  # I DON'T KNOW WHY THAT 2 IS THERE
+
+
+def accumulate_by_index(values: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """
+    Accumulates values into a 1D array based on given indices.
+
+    Args:
+        values (np.ndarray): Array of shape (N, M) containing values to accumulate.
+        indices (np.ndarray): Array of shape (N, M) containing integer indices where values should be accumulated.
+
+    Returns:
+        np.ndarray: 1D array where each position k contains the
+        sum of all entries values[i, j] such that indices[i, j] == k.
+    """
+    assert values.shape == indices.shape, "values and indices must have the same shape"
+
+    flat_indices = indices.ravel()
+    flat_values = values.ravel()
+
+    result_length = flat_indices.max() + 1
+    result = np.bincount(flat_indices, weights=flat_values, minlength=result_length)
+
+    return result
+
+
+def build_stiffness_matrix_v2(x_coords, elems, d, basis, diff):
+    n_leggauss = d  # guarantee 2*n_leggauss + 1 >= (d-1)*(d-1)
+    leggauss_nodes, leggauss_weights = np.polynomial.legendre.leggauss(n_leggauss)
+
+    element_bounds = np.append(x_coords[elems[:, 0]], x_coords[-1])
+    diffusion_component = prep_gauss_quadrature(diff, element_bounds)
+
+
+def build_stiffness_matrix(x_coords, d, elems, basis, diff):
     # basis derivatives
-    phi_0, phi_1 = basis_coeff
+    phi_0, phi_1 = basis
     dphi_0 = phi_0.deriv()(0.5)
     dphi_1 = phi_1.deriv()(0.5)
 
@@ -162,11 +214,11 @@ def build_stiffness_matrix(x_coords, basis_coeff, diff):
 
     # finite differences (h_i)
     x_diff = np.diff(x_coords)
-    x_mid = x_coords[:-1] + x_diff/2
+    x_mid = x_coords[:-1] + x_diff / 2
 
     # compute diffusion midpoints
-    diff_mid = (diff[1:] + diff[:-1])/2
-    integral_factors = np.multiply(x_diff**(-1), diff_mid)
+    diff_mid = (diff[1:] + diff[:-1]) / 2
+    integral_factors = np.multiply(x_diff ** (-1), diff_mid)
 
     # handle edge case
     integral_factors = np.append(integral_factors, [0])
@@ -184,46 +236,30 @@ def build_stiffness_matrix(x_coords, basis_coeff, diff):
     return stiff_mat
 
 
-def gauss_quadrature(f, dom, n: int):
-    """
+def build_load_vector(x_coords, d, elems, source, basis):
+    element_bounds = np.append(x_coords[elems[:, 0]], x_coords[-1])
 
-    :param f: integrand
-    :param dom: domain
-    :param n: number of sample points (>= 1)
-    :return: integral
-    """
-    nodes, weights = np.polynomial.legendre.leggauss(n)
-    pass
+    n_leggauss = d//2 + 1  # guarantee 2*n_leggauss + 1 >= polydeg
+    leggauss_nodes, leggauss_weights = np.polynomial.legendre.leggauss(n_leggauss)
 
+    for p in basis:
+        p.domain = np.array([-1, 1])
+    basis_vals = np.array([leggauss_weights * p(leggauss_nodes) for p in basis])
 
-def build_load_vector(x_coords, source, basis_coeff):
-    # finite differences (h_i)
-    x_diff = np.diff(x_coords)
+    source_component = prep_gauss_quadrature(source, element_bounds, leggauss_nodes)
 
-    phi_0, phi_1 = basis_coeff
-    p_right = phi_0(0.5)
-    p_left = phi_1(0.5)
+    integral_matrix = source_component @ basis_vals.T
 
-    # compute source midpoints
-    source_pts = source(x_coords)
-    source_mid = (source_pts[1:] + source_pts[:-1])/2
-
-    common_factor = np.append(x_diff * source_mid, [0])
-    right_integral = p_right * common_factor
-    left_integral = p_left * np.roll(common_factor, 1)
-
-    load_vector = left_integral + right_integral
-
-    return load_vector
+    return accumulate_by_index(integral_matrix, elems)
 
 
 def galerkin(n_elem: int, x_start=0.0, x_end=1.0, polydeg=1):
     nodes, elems, x_coords, n_dirichlet, dirichlet_nodes, dirichlet_vals, diffusion, source, u_real \
         = input_data(x_start, x_end, n_elem, polydeg)
-    basis_coeff = local_basis(n_elem, x_coords, elems)
+    basis_coeff = local_basis(polydeg=polydeg)
 
-    stiff_mat = build_stiffness_matrix(x_coords, basis_coeff, diffusion)
-    load_vect = build_load_vector(x_coords=x_coords, source=source, basis_coeff=basis_coeff)
+    stiff_mat = build_stiffness_matrix(x_coords, polydeg, elems, basis_coeff, diffusion)
+    load_vect = build_load_vector(x_coords=x_coords, d=polydeg, elems=elems, source=source, basis=basis_coeff)
 
     stiff_mat, load_vect = impose_boundary(
         n_dir=n_dirichlet,
@@ -297,7 +333,7 @@ def main():
     markers = cycle(['o', 's', '^', 'x', 'D', 'v', 'P', '*'])
 
     for n_elem in n_elems:
-        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end)
+        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end, polydeg=2)
         plt.plot(x_coords, u_approx, marker=next(markers), linestyle='--', markersize=3)
 
         residuals.append(calc_l2err(x_coords, u_approx, u_real))
@@ -312,5 +348,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    convergence_test()
 
