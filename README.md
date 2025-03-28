@@ -35,3 +35,51 @@ conda activate comp-diffeq
 
 Your environment is now ready and matches the original development setup.
 
+
+## 🧪 Testing with pytest
+
+This project uses the [pytest](https://docs.pytest.org/) framework for automated testing.
+
+### How to run tests:
+
+Activate the conda environment first (if not activated already):
+
+```bash
+conda activate comp-diffeq
+```
+
+Run all tests using:
+
+```bash
+pytest
+```
+
+For more detailed output (verbose mode):
+
+```bash
+pytest -v
+```
+
+### Writing new tests:
+
+- Create new test files under the `tests/` directory.
+- Name test files starting with `test_`.
+- Define each test function starting clearly with `test_`.
+
+Example:
+
+```python
+# tests/test_fem1d.py
+
+import numpy as np
+from fem.fem1d import elem_indices
+
+def test_elem_indices():
+    result = elem_indices(3, 1)
+    expected = np.array([[0, 1],
+                         [1, 2],
+                         [2, 3]])
+    np.testing.assert_array_equal(result, expected)
+```
+
+
