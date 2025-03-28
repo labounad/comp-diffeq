@@ -160,9 +160,9 @@ def prep_gauss_quadrature(f, dom, nodes):
     :param dom: endpoints of domains of integration
     :param nodes: sampling points in interval [-1,1]
     :return: array of points where ith row is
-            (dom_i - dom_i-1) * [f(T_i y_0)  f(T_i y_1),  ...,  f(T_i y_n-1)],
+            |T_i| * [f(T_i y_0)  f(T_i y_1),  ...,  f(T_i y_n-1)],
             where
-            - (dom_i - dom_i-1) is the size of the interval and
+            - |T_i| = (dom_i - dom_i-1) is the size of the interval and
             - f(T_i y_j) is the image of the jth node under the
                 affine transformation T_i: [-1,1] -> dom_i
     """
