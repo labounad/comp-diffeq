@@ -26,7 +26,7 @@ class TestParams:
         # half_nodes = len(x) // 2
         # other_half = len(x) - half_nodes
         # return np.concatenate((np.ones(half_nodes), 2 * np.ones(other_half)))
-        return np.ones(len(x))
+        return np.ones_like(x)
 
     @staticmethod
     def u_real(x):
@@ -40,7 +40,7 @@ class TestParams:
         """
         f(x) = (k*pi)^2 sin(k*pi*x)
         """
-        return TestParams.diffusion_function(x)[:, np.newaxis] * (TestParams.K_CONST * math.pi)**2 * TestParams.u_real(x)
+        return TestParams.diffusion_function(x) * (TestParams.K_CONST * math.pi) ** 2 * TestParams.u_real(x)
 
 
 def elem_indices(n: int, m: int) -> np.ndarray:
@@ -66,24 +66,24 @@ def elem_indices(n: int, m: int) -> np.ndarray:
 
 
 def _impose_neumann_boundary(
-    n_neu: int,
-    stiff_mat: np.ndarray,
-    penalty=1e15,
+        n_neu: int,
+        stiff_mat: np.ndarray,
+        penalty=1e15,
 ) -> [np.ndarray, np.ndarray]:
     pass
 
 
 def impose_boundary(
-    n_dir: int,
-    boundary_nodes: np.ndarray,
-    boundary_vals: np.ndarray,
-    stiff_mat: np.ndarray,
-    rhs: np.ndarray,
-    penalty=1e15,
-    neumann=False
+        n_dir: int,
+        boundary_nodes: np.ndarray,
+        boundary_vals: np.ndarray,
+        stiff_mat: np.ndarray,
+        rhs: np.ndarray,
+        penalty=1e15,
+        neumann=False
 ) -> [np.ndarray, np.ndarray]:
     if neumann:
-        return _impose_neumann_boundary(n_dir, penalty=penalty) # DEFUNCT
+        return _impose_neumann_boundary(n_dir, penalty=penalty)  # DEFUNCT
 
     for idir in range(n_dir):
         iglob = boundary_nodes[idir]
@@ -124,11 +124,13 @@ def input_data(x_start: float, x_end: float, n_elem: int, polydeg: int) \
     n_dirichlet = TestParams.N_DIRICHLET  # for 1D case
     dirichlet_nodes = np.zeros((n_dirichlet, 1), dtype=int)
     dirichlet_vals = np.zeros((n_dirichlet, 1), dtype=int)
-    dirichlet_nodes[0] = 0; dirichlet_nodes[1] = nodes - 1
-    dirichlet_vals[0] = 0; dirichlet_vals[1] = 0
+    dirichlet_nodes[0] = 0
+    dirichlet_nodes[1] = nodes - 1
+    dirichlet_vals[0] = 0
+    dirichlet_vals[1] = 0
 
     # define Diffusion Coefficient
-    diffusion = TestParams.diffusion_function(x_coords)
+    diffusion = TestParams.diffusion_function
 
     # define source function
     k_const = TestParams.K_CONST
@@ -140,16 +142,20 @@ def input_data(x_start: float, x_end: float, n_elem: int, polydeg: int) \
 
 def local_basis(polydeg=1):
     bases = {
-        1: (np.polynomial.Polynomial((1, -1), domain=[0, 1], window=[0, 1]),  # 1-x
-            np.polynomial.Polynomial((0, 1), domain=[0, 1], window=[0, 1])    # x
-            ),
-        2: (np.polynomial.Polynomial((0, -0.5, 0.5), domain=[-1, 1], window=[-1, 1]),  # -0.5x(1-x)
+        1: [np.polynomial.Polynomial((0.5, -0.5), domain=[-1, 1], window=[-1, 1]),  # 1-x
+            np.polynomial.Polynomial((0.5, 0.5), domain=[-1, 1], window=[-1, 1])  # x
+            ],
+        2: [np.polynomial.Polynomial((0, -0.5, 0.5), domain=[-1, 1], window=[-1, 1]),  # -0.5x(1-x)
             np.polynomial.Polynomial((1, 0, -1), domain=[-1, 1], window=[-1, 1]),  # 1-x^2
             np.polynomial.Polynomial((0, 0.5, 0.5), domain=[-1, 1], window=[-1, 1])  # 0.5x(1+x)
-            )
+            ]
     }
 
     return bases[polydeg]
+
+
+def derive_basis(basis):
+    return [p.deriv() for p in basis]
 
 
 def prep_gauss_quadrature(f, dom, nodes):
@@ -162,14 +168,14 @@ def prep_gauss_quadrature(f, dom, nodes):
     :return: array of points where ith row is
             |T_i| * [f(T_i y_0)  f(T_i y_1),  ...,  f(T_i y_n-1)],
             where
-            - |T_i| = (dom_i - dom_i-1) is the size of the interval and
+            - |T_i| = (dom_i - dom_i-1) / 2 is the Jacobian of the transform and
             - f(T_i y_j) is the image of the jth node under the
                 affine transformation T_i: [-1,1] -> dom_i
     """
     # apply affine transformation from [-1,1] into domains
-    transformed_nodes = (np.array((0.5*np.array([np.diff(dom)])).T @ [nodes + 1]) + dom[:-1][:, np.newaxis])
+    transformed_nodes = (np.array((0.5 * np.array([np.diff(dom)])).T @ [nodes + 1]) + dom[:-1][:, np.newaxis])
 
-    return np.diff(dom)[:, np.newaxis]/2 * f(transformed_nodes)  # I DON'T KNOW WHY THAT 2 IS THERE
+    return np.diff(dom)[:, np.newaxis] / 2 * f(transformed_nodes)
 
 
 def accumulate_by_index(values: np.ndarray, indices: np.ndarray) -> np.ndarray:
@@ -195,60 +201,49 @@ def accumulate_by_index(values: np.ndarray, indices: np.ndarray) -> np.ndarray:
     return result
 
 
-def build_stiffness_matrix_v2(x_coords, elems, d, basis, diff):
-    n_leggauss = d  # guarantee 2*n_leggauss + 1 >= (d-1)*(d-1)
+def build_stiffness_matrix(x_coords, d, elems, basis, diffusion):
+    n_nodes = len(x_coords)
+    stiff_mat = np.zeros((n_nodes, n_nodes))
+
+    n_leggauss = d
     leggauss_nodes, leggauss_weights = np.polynomial.legendre.leggauss(n_leggauss)
 
-    element_bounds = np.append(x_coords[elems[:, 0]], x_coords[-1])
-    diffusion_component = prep_gauss_quadrature(diff, element_bounds)
+    # Basis derivatives w.r.t. reference coord ξ
+    basis_deriv_vals = np.array([
+        p.deriv()(leggauss_nodes) for p in basis  # shape (n_basis, n_quad)
+    ])
 
+    for elem in elems:
+        elem_x = x_coords[elem]
+        x_start, x_end = elem_x[0], elem_x[-1]
+        J = (x_end - x_start) / 2
+        inv_J = 1 / J
 
-def build_stiffness_matrix(x_coords, d, elems, basis, diff):
-    # basis derivatives
-    phi_0, phi_1 = basis
-    dphi_0 = phi_0.deriv()(0.5)
-    dphi_1 = phi_1.deriv()(0.5)
+        # Transform Gauss points to physical coordinates
+        phys_pts = J * leggauss_nodes + (x_start + x_end) / 2
+        weighted_diffusion_vals = diffusion(phys_pts) * leggauss_weights  # shape (n_quad,)
 
-    c0 = dphi_0 ** 2
-    c1 = dphi_0 * dphi_1
+        # Chain rule: dφ/dx = dφ/dξ * (1 / J)
+        # basis_phys_derivs = basis_deriv_vals * inv_J  # shape (n_basis, n_quad)
 
-    # finite differences (h_i)
-    x_diff = np.diff(x_coords)
-    x_mid = x_coords[:-1] + x_diff / 2
-
-    # compute diffusion midpoints
-    diff_mid = (diff[1:] + diff[:-1]) / 2
-    integral_factors = np.multiply(x_diff ** (-1), diff_mid)
-
-    # handle edge case
-    integral_factors = np.append(integral_factors, [0])
-
-    # compute main diagonal A[i,i]
-    # initialize stiff_mat
-    diag = c0 * (integral_factors + np.roll(integral_factors, 1))
-    stiff_mat = np.diag(diag)
-
-    # compute off-diagonal A[i,i+1]
-    off_diag = c1 * integral_factors[:-1]
-    np.fill_diagonal(stiff_mat[1:, :], off_diag)
-    np.fill_diagonal(stiff_mat[:, 1:], off_diag)
+        # Form local stiffness matrix using weighted_D_vals quadrature
+        local_stiffness = (basis_deriv_vals * inv_J) @ np.diag(weighted_diffusion_vals) @ basis_deriv_vals.T  # shape (n_basis, n_basis)
+        stiff_mat[np.ix_(elem, elem)] += local_stiffness
 
     return stiff_mat
 
 
 def build_load_vector(x_coords, d, elems, source, basis):
     element_bounds = np.append(x_coords[elems[:, 0]], x_coords[-1])
-
-    n_leggauss = d//2 + 1  # guarantee 2*n_leggauss + 1 >= polydeg
+    n_leggauss = d // 2 + 1
     leggauss_nodes, leggauss_weights = np.polynomial.legendre.leggauss(n_leggauss)
 
-    for p in basis:
-        p.domain = np.array([-1, 1])
-    basis_vals = np.array([leggauss_weights * p(leggauss_nodes) for p in basis])
+    basis_vals = np.array([p(leggauss_nodes) for p in basis])  # (n_basis, n_quad)
+    weighted_basis_vals = basis_vals * leggauss_weights  # (n_basis, n_quad)
 
     source_component = prep_gauss_quadrature(source, element_bounds, leggauss_nodes)
 
-    integral_matrix = source_component @ basis_vals.T
+    integral_matrix = source_component @ weighted_basis_vals.T
 
     return accumulate_by_index(integral_matrix, elems)
 
@@ -289,14 +284,14 @@ def calc_l2err(x, f_approx, f_real, nodes_only=False):
 
 
 def convergence_test():
-    n_elems = [2**i for i in range(TestParams.MIN_NODES_EXP, TestParams.MAX_NODES_EXP + 1)]
+    n_elems = [2 ** i for i in range(TestParams.MIN_NODES_EXP, TestParams.MAX_NODES_EXP + 1)]
     x_start = TestParams.X_START
     x_end = TestParams.X_END
 
     residuals = []
 
     for n_elem in n_elems:
-        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end)
+        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end, polydeg=2)
         plt.plot(x_coords, u_approx)
 
         residuals.append(calc_l2err(x_coords, u_approx, u_real))
@@ -349,4 +344,3 @@ def main():
 
 if __name__ == '__main__':
     convergence_test()
-
