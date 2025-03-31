@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/CompDiffEq.iml" filepath="$PROJECT_DIR$/.idea/CompDiffEq.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/comp-diffeq.iml" filepath="$PROJECT_DIR$/.idea/comp-diffeq.iml" />
     </modules>
   </component>
 </project>
