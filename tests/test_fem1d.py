@@ -1,8 +1,8 @@
 import numpy as np
 from numpy.polynomial import Polynomial
 from fem.fem1d import (
-    impose_boundary,
-    elem_indices,
+    _impose_dirichlet_boundary,
+    _elem_indices,
     accumulate_by_index,
     build_load_vector,
     build_stiffness_matrix,
@@ -44,13 +44,13 @@ def prep_gauss_quadrature(f, dom, nodes):
 
 
 def test_elem_indices_linear():
-    result = elem_indices(3, 1)
+    result = _elem_indices(3, 1)
     expected = np.array([[0, 1], [1, 2], [2, 3]])
     np.testing.assert_array_equal(result, expected)
 
 
 def test_elem_indices_quadratic():
-    result = elem_indices(2, 2)
+    result = _elem_indices(2, 2)
     expected = np.array([[0, 1, 2], [2, 3, 4]])
     np.testing.assert_array_equal(result, expected)
 
@@ -75,7 +75,7 @@ def test_accumulate_by_index_basic():
 
 def test_build_load_vector_linear_three_elements():
     x_coords = np.linspace(0, 1, 4)  # 3 elements → 4 nodes
-    elems = elem_indices(3, 1)
+    elems = _elem_indices(3, 1)
     source = lambda x: np.ones_like(x)
     basis = local_basis(1)
 
@@ -86,7 +86,7 @@ def test_build_load_vector_linear_three_elements():
 
 def test_build_load_vector_quadratic_two_elements():
     x_coords = np.linspace(0, 1, 5)  # 2 quadratic elements → 5 nodes
-    elems = elem_indices(2, 2)
+    elems = _elem_indices(2, 2)
     source = lambda x: np.ones_like(x)
     basis = local_basis(2)
 
@@ -102,7 +102,7 @@ def test_build_load_vector_quadratic_two_elements():
 
 def test_build_stiffness_matrix_linear_three_elements():
     x_coords = np.linspace(0, 1, 4)  # 3 elements of size h = 1/3
-    elems = elem_indices(3, 1)
+    elems = _elem_indices(3, 1)
     diffusion = lambda x: np.ones_like(x)
     basis = local_basis(1)
 
@@ -119,7 +119,7 @@ def test_build_stiffness_matrix_linear_three_elements():
 
 def test_build_stiffness_matrix_quadratic_two_elements():
     x_coords = np.linspace(0, 1, 5)  # 2 quadratic elements → 5 nodes
-    elems = elem_indices(2, 2)
+    elems = _elem_indices(2, 2)
     diffusion = lambda x: np.ones_like(x)
     basis = local_basis(2)
 
@@ -138,7 +138,7 @@ def test_build_stiffness_matrix_quadratic_two_elements():
 
 def test_build_stiffness_matrix_quadratic_five_elements():
     x_coords = np.linspace(0, 1, 11)  # 5 quadratic elements → 11 nodes
-    elems = elem_indices(5, 2)
+    elems = _elem_indices(5, 2)
     diffusion = lambda x: np.ones_like(x)
     basis = local_basis(2)
 
@@ -187,20 +187,15 @@ def test_quadratic_convergence_with_known_solution():
 
     for n_elem in n_elems:
         x_coords = np.linspace(x_start, x_end, n_elem * polydeg + 1)
-        elems = elem_indices(n_elem, polydeg)
+        elems = _elem_indices(n_elem, polydeg)
         basis = local_basis(polydeg)
 
         stiff = build_stiffness_matrix(x_coords, polydeg, elems, basis, diffusion)
         load = build_load_vector(x_coords, polydeg, elems, source, basis)
 
         # Apply boundary conditions u(0) = u(1) = 0
-        stiff, load = impose_boundary(
-            n_dir=2,
-            boundary_nodes=np.array([0, len(x_coords)-1]),
-            boundary_vals=np.array([0, 0]),
-            stiff_mat=stiff,
-            rhs=load
-        )
+        stiff, load = _impose_dirichlet_boundary(n_dir=2, boundary_nodes=np.array([0, len(x_coords) - 1]),
+                                                 boundary_vals=np.array([0, 0]), stiff_mat=stiff, rhs=load)
 
         u_approx = np.linalg.solve(stiff, load)
         err = calc_l2err(x_coords, u_approx, u_real)

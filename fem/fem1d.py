@@ -10,8 +10,10 @@ import math
 import matplotlib.pyplot as plt
 from itertools import cycle
 
+from enum import Enum
 
-class TestParams:
+
+class Fem1dParams:
     K_CONST = 7
     N_DIRICHLET = 2
 
@@ -22,28 +24,73 @@ class TestParams:
     X_END = 1
 
     @staticmethod
-    def diffusion_function(x):
+    def default_diffusion_function(x):
         # half_nodes = len(x) // 2
         # other_half = len(x) - half_nodes
         # return np.concatenate((np.ones(half_nodes), 2 * np.ones(other_half)))
         return np.ones_like(x)
 
     @staticmethod
-    def u_real(x):
+    def default_u_real(x):
         """
         u(x) = sin(k*pi*x)
         """
-        return np.sin(TestParams.K_CONST * math.pi * x)
+        return np.sin(Fem1dParams.K_CONST * math.pi * x)
 
     @staticmethod
-    def source(x):
+    def default_source(x):
         """
         f(x) = (k*pi)^2 sin(k*pi*x)
         """
-        return TestParams.diffusion_function(x) * (TestParams.K_CONST * math.pi) ** 2 * TestParams.u_real(x)
+        return Fem1dParams.default_diffusion_function(x) * (Fem1dParams.K_CONST * math.pi) ** 2 * Fem1dParams.default_u_real(
+            x)
 
 
-def elem_indices(n: int, m: int) -> np.ndarray:
+class BoundaryTypes(Enum):
+    DIRICHLET = 'dirichlet'
+    NEUMANN = 'neumann'
+    CAUCHY = 'cauchy'
+
+
+class Fem1dInput:
+    def __init__(self,
+                 source_function=Fem1dParams.default_source,
+                 diffusion_function=Fem1dParams.default_diffusion_function,
+                 domain=(0, 1),
+                 n_elems=10**4,
+                 polydeg=1,
+                 boundary_conditions=False,
+                 boundary_type=BoundaryTypes.DIRICHLET.value):
+        self.source = source_function
+        self.diffusion = diffusion_function
+
+        self.x_start, self.x_end = domain
+        self.n_elems = n_elems
+
+        nodes = n_elems * polydeg + 1
+        self.n_nodes = nodes
+        self.x_coords = np.linspace(self.x_start, self.x_end, nodes)
+
+        self.elements = _elem_indices(n_elems, polydeg)
+
+        self.degree = polydeg
+
+        if not boundary_conditions:
+            self.boundary_conditions = np.array([[0, nodes-1], [0, 0]])
+        else:
+            self.boundary_conditions = np.array(boundary_conditions)
+            assert np.shape(self.boundary_conditions) == (2, 2)
+
+        if boundary_type == BoundaryTypes.DIRICHLET.value:
+            self.boundary_type = BoundaryTypes.DIRICHLET.value
+            self.n_dirichlet = Fem1dParams.N_DIRICHLET
+            self.dirichlet_nodes = self.boundary_conditions[0]
+            self.dirichlet_vals = self.boundary_conditions[1]
+
+        return
+
+
+def _elem_indices(n: int, m: int) -> np.ndarray:
     """
     Create an integer array representing element indices,
     with one element per row
@@ -73,14 +120,14 @@ def _impose_neumann_boundary(
     pass
 
 
-def impose_boundary(
+def _impose_dirichlet_boundary(
         n_dir: int,
         boundary_nodes: np.ndarray,
         boundary_vals: np.ndarray,
         stiff_mat: np.ndarray,
         rhs: np.ndarray,
         penalty=1e15,
-        neumann=False
+        neumann=False  # TODO: REMOVE FLAG
 ) -> [np.ndarray, np.ndarray]:
     if neumann:
         return _impose_neumann_boundary(n_dir, penalty=penalty)  # DEFUNCT
@@ -92,52 +139,8 @@ def impose_boundary(
     return stiff_mat, rhs
 
 
-def input_data(x_start: float, x_end: float, n_elem: int, polydeg: int) \
-        -> [
-            int,
-            int,
-            np.ndarray,
-            np.ndarray,
-            np.ndarray,
-            np.ndarray,
-            np.ndarray,
-            np.ndarray,
-            np.ndarray
-        ]:
-    """
-
-    :param x_start:
-    :param x_end:
-    :param n_elem:
-    :return:
-    """
-
-    # discretize interval [a,b] by
-    # (n_elements+1) intervals
-    nodes = n_elem * polydeg + 1
-    x_coords = np.linspace(x_start, x_end, nodes)
-
-    # define element indices
-    elements = elem_indices(n_elem, polydeg)
-
-    # define Dirichlet boundary conditions
-    n_dirichlet = TestParams.N_DIRICHLET  # for 1D case
-    dirichlet_nodes = np.zeros((n_dirichlet, 1), dtype=int)
-    dirichlet_vals = np.zeros((n_dirichlet, 1), dtype=int)
-    dirichlet_nodes[0] = 0
-    dirichlet_nodes[1] = nodes - 1
-    dirichlet_vals[0] = 0
-    dirichlet_vals[1] = 0
-
-    # define Diffusion Coefficient
-    diffusion = TestParams.diffusion_function
-
-    # define source function
-    k_const = TestParams.K_CONST
-    u_real = TestParams.u_real
-    source = TestParams.source
-
-    return nodes, elements, x_coords, n_dirichlet, dirichlet_nodes, dirichlet_vals, diffusion, source, u_real
+def impose_boundary():
+    pass
 
 
 def local_basis(polydeg=1):
@@ -248,24 +251,22 @@ def build_load_vector(x_coords, d, elems, source, basis):
     return accumulate_by_index(integral_matrix, elems)
 
 
-def galerkin(n_elem: int, x_start=0.0, x_end=1.0, polydeg=1):
-    nodes, elems, x_coords, n_dirichlet, dirichlet_nodes, dirichlet_vals, diffusion, source, u_real \
-        = input_data(x_start, x_end, n_elem, polydeg)
-    basis_coeff = local_basis(polydeg=polydeg)
+def galerkin(inputs=Fem1dInput()):
+    basis_coeff = local_basis(polydeg=inputs.degree)
 
-    stiff_mat = build_stiffness_matrix(x_coords, polydeg, elems, basis_coeff, diffusion)
-    load_vect = build_load_vector(x_coords=x_coords, d=polydeg, elems=elems, source=source, basis=basis_coeff)
+    stiff_mat = build_stiffness_matrix(inputs.x_coords, inputs.degree, inputs.elements, basis_coeff, inputs.diffusion)
+    load_vect = build_load_vector(
+        x_coords=inputs.x_coords, d=inputs.degree, elems=inputs.elements, source=inputs.source, basis=basis_coeff
+    )
 
-    stiff_mat, load_vect = impose_boundary(
-        n_dir=n_dirichlet,
-        boundary_nodes=dirichlet_nodes,
-        boundary_vals=dirichlet_vals,
-        stiff_mat=stiff_mat,
-        rhs=load_vect)
+    if inputs.boundary_type == BoundaryTypes.DIRICHLET.value:
+        stiff_mat, load_vect = _impose_dirichlet_boundary(n_dir=inputs.n_dirichlet, boundary_nodes=inputs.dirichlet_nodes,
+                                                          boundary_vals=inputs.dirichlet_vals, stiff_mat=stiff_mat,
+                                                          rhs=load_vect)
 
     u_approx = np.linalg.solve(stiff_mat, load_vect)
 
-    return x_coords, u_approx, u_real
+    return inputs.x_coords, u_approx
 
 
 def calc_l2err(x, f_approx, f_real, nodes_only=False):
@@ -284,20 +285,23 @@ def calc_l2err(x, f_approx, f_real, nodes_only=False):
 
 
 def convergence_test():
-    n_elems = [2 ** i for i in range(TestParams.MIN_NODES_EXP, TestParams.MAX_NODES_EXP + 1)]
-    x_start = TestParams.X_START
-    x_end = TestParams.X_END
+    n_elems = [2 ** i for i in range(Fem1dParams.MIN_NODES_EXP, Fem1dParams.MAX_NODES_EXP + 1)]
+    x_start = Fem1dParams.X_START
+    x_end = Fem1dParams.X_END
 
     residuals = []
 
+    u_real = Fem1dParams.default_u_real
+
     for n_elem in n_elems:
-        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end, polydeg=2)
+        fem_input = Fem1dInput(domain=(x_start, x_end), n_elems=n_elem, polydeg=1)
+        x_coords, u_approx = galerkin(fem_input)
         plt.plot(x_coords, u_approx)
 
         residuals.append(calc_l2err(x_coords, u_approx, u_real))
 
     x_fine = np.linspace(x_start, x_end, 10 ** 4)
-    plt.plot(x_fine, TestParams.u_real(x_fine))
+    plt.plot(x_fine, Fem1dParams.default_u_real(x_fine))
     plt.ylim((-1.25, 1.25))
 
     plt.xlabel("X")
@@ -318,17 +322,19 @@ def convergence_test():
 
 
 def main():
-    n_elems = [2 ** i for i in range(TestParams.MIN_NODES_EXP, TestParams.MAX_NODES_EXP + 1)]
-    x_start = TestParams.X_START
-    x_end = TestParams.X_END
+    n_elems = [2 ** i for i in range(Fem1dParams.MIN_NODES_EXP, Fem1dParams.MAX_NODES_EXP + 1)]
+    x_start = Fem1dParams.X_START
+    x_end = Fem1dParams.X_END
 
     residuals = []
 
     # Define marker cycle
     markers = cycle(['o', 's', '^', 'x', 'D', 'v', 'P', '*'])
 
+    u_real = Fem1dParams.default_u_real
+
     for n_elem in n_elems:
-        x_coords, u_approx, u_real = galerkin(n_elem, x_start, x_end, polydeg=2)
+        x_coords, u_approx = galerkin(n_elem)
         plt.plot(x_coords, u_approx, marker=next(markers), linestyle='--', markersize=3)
 
         residuals.append(calc_l2err(x_coords, u_approx, u_real))
@@ -344,3 +350,4 @@ def main():
 
 if __name__ == '__main__':
     convergence_test()
+    # main()

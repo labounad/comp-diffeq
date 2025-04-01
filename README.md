@@ -72,10 +72,11 @@ Example:
 # tests/test_fem1d.py
 
 import numpy as np
-from fem.fem1d import elem_indices
+from fem.fem1d import _elem_indices
+
 
 def test_elem_indices():
-    result = elem_indices(3, 1)
+    result = _elem_indices(3, 1)
     expected = np.array([[0, 1],
                          [1, 2],
                          [2, 3]])
