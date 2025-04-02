@@ -4,15 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a34e3b5-7be3-4be9-9a42-4cabbefab914" name="Changes" comment="fix testing for fem1d.py, implement corrected build_stiffness_matrix and build_load_vector functions">
-      <change afterPath="$PROJECT_DIR$/cli/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/arg_parser.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/fem/fem2d.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_fem2d.py" afterDir="false" />
+    <list default="true" id="1a34e3b5-7be3-4be9-9a42-4cabbefab914" name="Changes" comment="Update testing">
+      <change afterPath="$PROJECT_DIR$/cli/cli.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/commands.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/utils.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_cli.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/fem/arg_parser.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/fem/fem1d.py" beforeDir="false" afterPath="$PROJECT_DIR$/fem/fem1d.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_fem1d.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_fem1d.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/arg_parser.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -118,7 +116,15 @@
       <option name="project" value="LOCAL" />
       <updated>1743410124761</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="Update testing">
+      <option name="closed" value="true" />
+      <created>1743591887988</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1743591887988</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -152,7 +158,8 @@
     <MESSAGE value="update README.md with testing instructions" />
     <MESSAGE value="implement initial pytest testing" />
     <MESSAGE value="fix testing for fem1d.py, implement corrected build_stiffness_matrix and build_load_vector functions" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix testing for fem1d.py, implement corrected build_stiffness_matrix and build_load_vector functions" />
+    <MESSAGE value="Update testing" />
+    <option name="LAST_COMMIT_MESSAGE" value="Update testing" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/comp_diffeq$fem1d.coverage" NAME="fem1d Coverage Results" MODIFIED="1743591157208" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/fem" />
