@@ -1,16 +1,23 @@
 """
 Finite element code for solving the
-1D piecewise linear Galerkin DiffEq (D):
+1D Galerkin DiffEq (D):
     -(Diff u')' = f  in (a,b)
     u(a) = u(b) = 0  (Dirichlet BC)
+Support for piecewise linear or piecewise quadratic
+basis functions.
 """
 
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 from itertools import cycle
-
 from enum import Enum
+
+import os
+import sys
+module_path = os.path.abspath(os.path.join('..'))
+if module_path not in sys.path:
+    sys.path.append(module_path)
 
 
 class Fem1dParams:
@@ -18,7 +25,7 @@ class Fem1dParams:
     N_DIRICHLET = 2
 
     MIN_NODES_EXP = 3
-    MAX_NODES_EXP = 12
+    MAX_NODES_EXP = 10
 
     X_START = 0
     X_END = 1
@@ -42,8 +49,7 @@ class Fem1dParams:
         """
         f(x) = (k*pi)^2 sin(k*pi*x)
         """
-        return Fem1dParams.default_diffusion_function(x) * (Fem1dParams.K_CONST * math.pi) ** 2 * Fem1dParams.default_u_real(
-            x)
+        return Fem1dParams.default_diffusion_function(x) * (Fem1dParams.K_CONST * math.pi) ** 2 * Fem1dParams.default_u_real(x)
 
 
 class BoundaryTypes(Enum):
@@ -251,7 +257,57 @@ def build_load_vector(x_coords, d, elems, source, basis):
     return accumulate_by_index(integral_matrix, elems)
 
 
-def galerkin(inputs=Fem1dInput()):
+def approximate_solution(u_coeff: np.ndarray, fem_input: Fem1dInput):
+    """
+    Generate the approximate solution function u(x) from FEM coefficients.
+
+    Parameters:
+        u_coeff (np.ndarray): Array of coefficients obtained from galerkin.
+        fem_input (Fem1dInput): The FEM input object containing mesh details.
+
+    Returns:
+        u_func (callable): Function u_func(x) giving the approximate solution at arbitrary x.
+    """
+    x_coords = fem_input.x_coords
+    elems = fem_input.elements
+    polydeg = fem_input.degree
+    basis = local_basis(polydeg)
+
+    # Precompute element intervals and transformations
+    element_intervals = [(x_coords[el[0]], x_coords[el[-1]]) for el in elems]
+
+    def u_func(x):
+        x = np.atleast_1d(x)
+        u_x = np.zeros_like(x)
+
+        for e_idx, (x_start, x_end) in enumerate(element_intervals):
+            # Find indices of points within the current element
+            indices = np.where((x >= x_start) & (x <= x_end))[0]
+
+            if len(indices) == 0:
+                continue
+
+            x_elem = x[indices]
+
+            # Map physical coordinates to reference coordinates ξ ∈ [-1,1]
+            J = (x_end - x_start) / 2
+            xi = (x_elem - (x_start + x_end) / 2) / J
+
+            # Evaluate basis functions at xi
+            basis_vals = np.array([b(xi) for b in basis])
+
+            # Global indices for this element
+            global_indices = elems[e_idx]
+
+            # Evaluate u(x) using the local basis and global coefficients
+            u_x[indices] = np.dot(u_coeff[global_indices], basis_vals)
+
+        return u_x if len(u_x) > 1 else u_x.item()
+
+    return u_func
+
+
+def galerkin(inputs=Fem1dInput(), return_function=False):
     basis_coeff = local_basis(polydeg=inputs.degree)
 
     stiff_mat = build_stiffness_matrix(inputs.x_coords, inputs.degree, inputs.elements, basis_coeff, inputs.diffusion)
@@ -264,24 +320,53 @@ def galerkin(inputs=Fem1dInput()):
                                                           boundary_vals=inputs.dirichlet_vals, stiff_mat=stiff_mat,
                                                           rhs=load_vect)
 
-    u_approx = np.linalg.solve(stiff_mat, load_vect)
+    u_approx_coeff = np.linalg.solve(stiff_mat, load_vect)
 
-    return inputs.x_coords, u_approx
+    if return_function:
+        return approximate_solution(u_approx_coeff, inputs)
+
+    return u_approx_coeff
 
 
-def calc_l2err(x, f_approx, f_real, nodes_only=False):
-    if nodes_only:
-        f_real_vals = f_real(x)
-        return np.linalg.norm(f_real_vals - f_approx)
+def calc_l2err(f_approx, f_real, fem_input):
+    """
+    Compute L2 error ||f_approx - f_real|| over [a,b] using Gaussian quadrature.
 
-    fine_x = np.linspace(x[0], x[-1], 10000)
-    f_real_vals = f_real(fine_x)
-    f_approx_vals = np.interp(fine_x, x, f_approx)
+    Parameters:
+        f_approx (callable): Approximate solution function u_approx(x).
+        f_real (callable): Exact solution u_real(x).
+        fem_input (Fem1dInput): FEM input object containing mesh details.
 
-    error_squared = (f_real_vals - f_approx_vals) ** 2
-    integral = np.trapz(error_squared, fine_x)
+    Returns:
+        float: The computed L2 error.
+    """
+    x_coords = fem_input.x_coords
+    elems = fem_input.elements
+    polydeg = fem_input.degree
 
-    return np.sqrt(integral)
+    # Choose enough quadrature points to integrate exactly up to degree 2*polydeg
+    n_quad = polydeg + 1
+    xi_quad, w_quad = np.polynomial.legendre.leggauss(n_quad)
+
+    error_sq = 0.0
+
+    # Loop over each element
+    for elem in elems:
+        x_start, x_end = x_coords[elem[0]], x_coords[elem[-1]]
+        J = (x_end - x_start) / 2
+
+        # Map quadrature points to physical coordinates
+        x_quad = J * xi_quad + (x_start + x_end) / 2
+
+        # Evaluate exact and approximate functions
+        u_real_vals = f_real(x_quad)
+        u_approx_vals = f_approx(x_quad)
+
+        # Compute squared error at quadrature points, weighted by J
+        integrand = (u_real_vals - u_approx_vals) ** 2
+        error_sq += np.sum(integrand * w_quad) * J
+
+    return np.sqrt(error_sq)
 
 
 def convergence_test():
@@ -292,16 +377,16 @@ def convergence_test():
     residuals = []
 
     u_real = Fem1dParams.default_u_real
+    x_fine = np.linspace(x_start, x_end, 10 ** 4)
 
     for n_elem in n_elems:
-        fem_input = Fem1dInput(domain=(x_start, x_end), n_elems=n_elem, polydeg=1)
-        x_coords, u_approx = galerkin(fem_input)
-        plt.plot(x_coords, u_approx)
+        fem_input = Fem1dInput(domain=(x_start, x_end), n_elems=n_elem, polydeg=2)
+        u_approx = galerkin(fem_input, return_function=True)
+        plt.plot(x_fine, u_approx(x_fine))
 
-        residuals.append(calc_l2err(x_coords, u_approx, u_real))
+        residuals.append(calc_l2err(u_approx, u_real, fem_input))
 
-    x_fine = np.linspace(x_start, x_end, 10 ** 4)
-    plt.plot(x_fine, Fem1dParams.default_u_real(x_fine))
+    plt.plot(x_fine, u_real(x_fine))
     plt.ylim((-1.25, 1.25))
 
     plt.xlabel("X")
@@ -313,7 +398,7 @@ def convergence_test():
     plt.plot(np.log(residuals))
     plt.show()
 
-    ratios = np.divide(residuals[:-1], residuals[1:])
+    ratios = np.divide(residuals[:-1], residuals[1:])  # should tend to 4 if polydeg==1, 8 if polydeg==2
     print(ratios)
     plt.plot(ratios)
     plt.show()
@@ -321,33 +406,6 @@ def convergence_test():
     return
 
 
-def main():
-    n_elems = [2 ** i for i in range(Fem1dParams.MIN_NODES_EXP, Fem1dParams.MAX_NODES_EXP + 1)]
-    x_start = Fem1dParams.X_START
-    x_end = Fem1dParams.X_END
-
-    residuals = []
-
-    # Define marker cycle
-    markers = cycle(['o', 's', '^', 'x', 'D', 'v', 'P', '*'])
-
-    u_real = Fem1dParams.default_u_real
-
-    for n_elem in n_elems:
-        x_coords, u_approx = galerkin(n_elem)
-        plt.plot(x_coords, u_approx, marker=next(markers), linestyle='--', markersize=3)
-
-        residuals.append(calc_l2err(x_coords, u_approx, u_real))
-
-    # x_fine = np.linspace(x_start, x_end, 10 ** 4)
-    # plt.ylim((-1.25, 1.25))
-
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.title("u_real and u_approx")
-    plt.show()
-
-
 if __name__ == '__main__':
     convergence_test()
-    # main()
+
