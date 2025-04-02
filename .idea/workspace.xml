@@ -4,13 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a34e3b5-7be3-4be9-9a42-4cabbefab914" name="Changes" comment="Update testing">
-      <change afterPath="$PROJECT_DIR$/cli/cli.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/commands.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_cli.py" afterDir="false" />
+    <list default="true" id="1a34e3b5-7be3-4be9-9a42-4cabbefab914" name="Changes" comment="implement initial CLI">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/arg_parser.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/cli/fem.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_cli.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -124,7 +121,15 @@
       <option name="project" value="LOCAL" />
       <updated>1743591887988</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="implement initial CLI">
+      <option name="closed" value="true" />
+      <created>1743595402618</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1743595402618</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -159,7 +164,8 @@
     <MESSAGE value="implement initial pytest testing" />
     <MESSAGE value="fix testing for fem1d.py, implement corrected build_stiffness_matrix and build_load_vector functions" />
     <MESSAGE value="Update testing" />
-    <option name="LAST_COMMIT_MESSAGE" value="Update testing" />
+    <MESSAGE value="implement initial CLI" />
+    <option name="LAST_COMMIT_MESSAGE" value="implement initial CLI" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/comp_diffeq$fem1d.coverage" NAME="fem1d Coverage Results" MODIFIED="1743591157208" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/fem" />

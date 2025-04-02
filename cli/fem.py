@@ -1,4 +1,4 @@
-# main CLI entry-point
+# fem: main CLI entry-point
 
 import click
 
@@ -15,6 +15,7 @@ from cli.commands import solve
 def fem():
     """FEM CLI: Solve differential equations numerically."""
     pass
+
 
 fem.add_command(solve)
 
